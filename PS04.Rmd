@@ -1,6 +1,6 @@
 ---
 title: "STAT/MATH 495: Problem Set 04"
-author: "WRITE YOUR NAME HERE"
+author: "Anthony Rentsch"
 date: "2017-10-03"
 output:
   html_document:
@@ -14,19 +14,21 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, fig.width=8, fig.height=4.5, message=FALSE)
 set.seed(76)
+library(tidyverse)
+library(dplyr)
+library(gridExtra)
+library(grid)
 ```
 
 # Collaboration
 
-Please indicate who you collaborated with on this assignment:
+I worked alone on this problem set.
 
 
 # Load packages, data, model formulas
 
 ```{r, warning=FALSE}
-library(tidyverse)
-credit <- read_csv("http://www-bcf.usc.edu/~gareth/ISL/Credit.csv") %>%
-  select(-X1) %>%
+credit <- read.csv("http://www-bcf.usc.edu/~gareth/ISL/Credit.csv") %>%
   mutate(ID = 1:n()) %>% 
   select(ID, Balance, Income, Limit, Rating, Age, Cards, Education)
 ```
@@ -56,16 +58,49 @@ credit_test <- credit %>%
 
 # RMSE vs number of coefficients
 
-```{r, echo=TRUE, warning=FALSE, message=FALSE}
-# Placeholder vectors of length 7. For now, I've filled them with arbitrary 
-# values; you will fill these in
+```{r, echo=FALSE}
+# Initialize storage objects
 RMSE_train <- runif(n=7)
 RMSE_test <- runif(n=7)
 
+```
 
-# Do your work here:
 
+```{r, echo=TRUE, warning=FALSE, message=FALSE}
+# Store all model formulas in a list
+models <- c(model1_formula, 
+            model2_formula, 
+            model3_formula, 
+            model4_formula, 
+            model5_formula, 
+            model6_formula,
+            model7_formula)
 
+# Create a function to calculate RMSE
+calculateRMSE <- function(obs, preds) sqrt(mean((obs - preds)^2))
+
+# Loop through each model formula, train model, and calculate RMSE for training and test sets
+i <- 1
+while(i <= 7){
+  # Train model
+  this.model <- lm(models[[i]], data = credit_train)
+  
+  # Calculate RMSE for training set
+  RMSE_train[i] <- calculateRMSE(credit_train$Balance, this.model$fitted.values)
+  
+  # Use model to make predictions for test set and calculate RMSE
+  new_data <- as.data.frame(credit_test)
+  preds <- predict(this.model, new_data)
+  preds <- as.data.frame(preds)
+  preds <- cbind(preds, obs = credit_test$Balance)
+  RMSE_test[i] <- calculateRMSE(preds$obs, preds$preds)
+  
+  # Iterate
+  i = i + 1
+}
+```
+
+```{r, echo=FALSE}
 # Save results in a data frame. Note this data frame is in wide format.
 results <- data_frame(
   num_coefficients = 1:7,
@@ -83,18 +118,24 @@ results <- results %>%
   # Convert results data frame to "tidy" data format i.e. long format, so that we
   # can ggplot it
   gather(type, RMSE, -num_coefficients)
+```
 
-ggplot(results, aes(x=num_coefficients, y=RMSE, col=type)) +
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+small_train <- ggplot(results, aes(x=num_coefficients, y=RMSE, col=type)) +
   geom_line() + 
-  labs(x="# of coefficients", y="RMSE", col="Data used to evaluate \nperformance of fitted model")
+  labs(x="# of coefficients", y="RMSE", col="Data used to evaluate \nperformance of fitted model",
+       title = "Evaluating performance of regression for prediction of credit card balance")
+
+small_train
 ```
 
 
 # Interpret the graph
 
-Compare and contrast the two curves and hypothesize as to the root cause of any differences.
+For any number of coefficients in the model, the RMSE of the training data is smaller than the RMSE of the test data. This makes sense because our training set had only 20 observations, while our test set had 380 observations. Thus, while adding more predictors strictly improves the performance of the model with respect to the in-sample RMSE, the out-of-sample RMSE shrinks as the number of coefficients in our model increases up to about 3 and then actually begins to increase again, suggesting that a model that is fitted on a few data points (5% of the data we were given) and that includes many predictors is likely to overfit.
 
-
+These lines also suggest that any model with less than 2 predictors (3 coefficients) will suffer from underfitting. 
 
 # Bonus
 
@@ -102,6 +143,73 @@ Repeat the whole process, but let `credit_train` be a random sample of size 380
 from `credit` instead of 20. Now compare and contrast this graph with the
 one above and hypothesize as to the root cause of any differences.
 
-```{r, echo=FALSE}
-
+```{r}
+# Resample from credit, but specify that training set should have 380 observations, not 20
+set.seed(66)
+credit_train_new <- credit %>% 
+  sample_n(380)
+credit_test_new <- credit %>% 
+  anti_join(credit_train_new, by="ID")
 ```
+
+```{r, echo=FALSE, warning=FALSE}
+# Initialize new storage objects
+RMSE_train_new <- NULL
+RMSE_test_new <- NULL
+preds_new <- NULL
+this.model.new <- NULL
+
+# Loop through each model formula, train model, and calculate RMSE for training and test sets
+attach(credit_train_new)
+i <- 1
+while(i <= 7){
+  # Train model
+  this.model.new <- lm(models[[i]], data = credit_train_new)
+  
+  # Calculate RMSE for training set
+  RMSE_train_new[i] <- calculateRMSE(credit_train_new$Balance, this.model.new$fitted.values)
+  
+  # Use model to make predictions for test set and calculate RMSE
+  new_data2 <- as.data.frame(credit_test_new)
+  preds_new <- predict(this.model.new, new_data2)
+  preds_new <- as.data.frame(preds_new)
+  preds_new <- cbind(preds_new, obs = credit_test_new$Balance)
+  RMSE_test_new[i] <- calculateRMSE(preds_new$obs, preds_new$preds_new)
+  
+  # Iterate
+  i = i + 1
+}
+detach()
+
+# Save results in a data frame. Note this data frame is in wide format.
+results_new <- data_frame(
+  num_coefficients = 1:7,
+  RMSE_train_new,
+  RMSE_test_new
+) 
+
+# Some cleaning of results
+results_new <- results_new %>% 
+  # More intuitive names:
+  rename(
+    `Training data` = RMSE_train_new,
+    `Test data` = RMSE_test_new
+  ) %>% 
+  # Convert results data frame to "tidy" data format i.e. long format, so that we
+  # can ggplot it
+  gather(type, RMSE, -num_coefficients)
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+large_train <- ggplot(results_new, aes(x=num_coefficients, y=RMSE, col=type)) +
+  geom_line() + 
+  labs(x="# of coefficients", y="RMSE", col="Data used to evaluate \nperformance of fitted model")
+
+grid.arrange(small_train, large_train, nrow = 2, 
+             top = textGrob("Small training set (top) vs large training set (bottom)",
+                            gp = gpar(fontsize = 15,fontface = "bold")))
+```
+
+For a large training set we see that the two lines are a bit different. While for less than 3 coefficients in our model the out-of-sample RMSE is still higher than the in-sample RMSE, the inclusion of the third coefficient reduces the out-of-sample RMSE below the in-sample RMSE. At this point, both lines begin to plateau, suggesting that including subsequent predictors to the model does not greatly increase the model's predictive ability. But, the problem of overfitting seems less apparent when the training set is comprised of 95% of the data rather than 5%, as the out-of-sample prediction error does not increase when the model contains more predictors.
+
+Again, however, we see that including less than 2 predictors (3 coefficients) in the model leads to underfitting, as indicated by the relatively large values of RMSE when the number of coefficients is less than 3.
